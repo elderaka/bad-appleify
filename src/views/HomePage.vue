@@ -16,7 +16,7 @@ import { downloadBinaryGzip, downloadDecoder } from '../utils/downloads'
 import type { RenderMeta } from '../types'
 import type { UploadedBinaryMeta } from '../utils/upload'
 
-const videoMuted = ref(false)
+const videoMuted = ref(true)
 const videoPaused = ref(false)
 const currentTime = ref(0)
 const duration = ref(0)
@@ -80,6 +80,17 @@ const handleResize = () => {
 onMounted(() => {
   updatePreviewSize()
   window.addEventListener('resize', handleResize)
+  
+  // Interaction fallback for autoplay
+  const handleInteraction = () => {
+    if (videoRef.value && videoRef.value.paused) {
+      videoRef.value.play().catch(() => {})
+    }
+    window.removeEventListener('click', handleInteraction)
+    window.removeEventListener('touchstart', handleInteraction)
+  }
+  window.addEventListener('click', handleInteraction)
+  window.addEventListener('touchstart', handleInteraction)
 })
 
 onBeforeUnmount(() => {

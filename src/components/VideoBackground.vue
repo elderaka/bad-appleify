@@ -19,13 +19,19 @@ const emit = defineEmits<{
 
 const videoRef = ref<HTMLVideoElement | null>(null)
 
-onMounted(() => {
+const tryPlay = async () => {
     const video = videoRef.value
     if (video) {
-        video.play().catch(() => {
-            // Autoplay blocked, user must interact
-        })
+        try {
+            await video.play()
+        } catch (err) {
+            console.warn('[VideoBackground] Autoplay blocked', err)
+        }
     }
+}
+
+onMounted(() => {
+    tryPlay()
 })
 
 watch(() => props.paused, (isPaused) => {
@@ -34,7 +40,7 @@ watch(() => props.paused, (isPaused) => {
     if (isPaused) {
         video.pause()
     } else {
-        video.play()
+        tryPlay()
     }
 })
 
@@ -86,7 +92,7 @@ defineExpose({
 
 <template>
     <video ref="videoRef" class="video-background" :class="{ smooth: smoothInterpolation }" 
-      :src="src" :muted="muted" playsinline loop
+      :src="src" :muted="muted" playsinline loop autoplay
     @loadedmetadata="handleLoadedMetadata" @timeupdate="handleTimeUpdate" 
     @progress="handleProgress" @canplaythrough="handleCanPlayThrough" 
     @waiting="handleProgress" @stalled="handleProgress" @ended="handleEnded" />
