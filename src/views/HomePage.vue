@@ -7,6 +7,7 @@ import StencilTitle from '../components/StencilTitle.vue'
 import ConfigPanel from '../components/ConfigPanel.vue'
 import DraggablePreview from '../components/DraggablePreview.vue'
 import UploadPreviewModal from '../components/UploadPreviewModal.vue'
+import LoadingBar from '../components/LoadingBar.vue'
 import { useFrameRenderer } from '../composables/useFrameRenderer'
 import { usePlayback } from '../composables/usePlayback'
 import { clampSize } from '../utils/formatters'
@@ -27,6 +28,8 @@ const smoothInterpolation = ref(false)
 const targetMaxSize = ref(480)
 const targetFps = ref(30)
 const isRendering = ref(false)
+const isResourceLoading = ref(true)
+const resourceLoadingProgress = ref(0)
 
 const showUploadModal = ref(false)
 const isBinaryPreviewPlaying = ref(false)
@@ -85,6 +88,7 @@ onBeforeUnmount(() => {
 
 const handleVideoLoaded = (video: HTMLVideoElement) => {
   videoRef.value = video
+  isResourceLoading.value = false
   initCanvases()
 }
 
@@ -257,6 +261,19 @@ const { renderProgress, packedFrames, handleRender, cleanupWorker } = useFrameRe
   targetFps,
 )
 
+// Dynamic Title Handling
+watch([isRendering, isResourceLoading, () => renderProgress.current, () => renderProgress.total, resourceLoadingProgress], 
+  ([rendering, resourceLoading, current, total, resProgress]) => {
+  if (rendering) {
+    const percent = total > 0 ? Math.floor((current / total) * 100) : 0
+    document.title = `An apple a day keeps the doctor await ${percent}%`
+  } else if (resourceLoading) {
+    document.title = `An apple a day keeps the doctor await ${Math.floor(resProgress)}%`
+  } else {
+    document.title = 'Bad Appleify'
+  }
+})
+
 const {
   initializePlayback,
   startPlayback,
@@ -366,7 +383,11 @@ onBeforeUnmount(() => {
     <VideoBackground ref="videoBackgroundRef" src="/bad_apple.mp4" :muted="videoMuted" :paused="videoPaused"
       :smooth-interpolation="smoothInterpolation"
       @update:current-time="currentTime = $event" @update:duration="duration = $event"
-      @loaded-metadata="handleVideoLoaded" @timeupdate="handleTimeUpdate" />
+      @loaded-metadata="handleVideoLoaded" @timeupdate="handleTimeUpdate" 
+      @progress="resourceLoadingProgress = $event" />
+
+    <LoadingBar v-if="isResourceLoading" :current="resourceLoadingProgress" :total="100" label="LOADING ASSETS..." />
+    <LoadingBar v-else-if="isRendering" :current="renderProgress.current" :total="renderProgress.total" label="PACKING FRAMES..." />
 
     <VideoControls v-model:muted="videoMuted" v-model:paused="videoPaused" @upload="showUploadModal = true" />
 
