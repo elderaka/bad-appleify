@@ -11,7 +11,53 @@
  */
 
 const table_tag = 'table2'
+const DEFAULT_YT_ID = 'FtutLA63Cp8'
+
 ;(async function () {
+  let ytPlayer = null
+  let ytReady = false
+
+  const ytPromise = new Promise((resolve) => {
+    if (window.YT && window.YT.Player) {
+      onYouTubeIframeAPIReady()
+    } else {
+      const tag = document.createElement('script')
+      tag.src = 'https://www.youtube.com/iframe_api'
+      const firstScriptTag = document.getElementsByTagName('script')[0]
+      firstScriptTag.parentNode.insertBefore(tag, firstScriptTag)
+    }
+
+    window.onYouTubeIframeAPIReady = () => {
+      const playerDiv = document.createElement('div')
+      playerDiv.id = 'bad-apple-yt-player'
+      playerDiv.style.position = 'fixed'
+      playerDiv.style.bottom = '10px'
+      playerDiv.style.right = '10px'
+      playerDiv.style.width = '200px'
+      playerDiv.style.height = '120px'
+      playerDiv.style.zIndex = '9999'
+      playerDiv.style.border = '2px solid red'
+      document.body.appendChild(playerDiv)
+
+      ytPlayer = new window.YT.Player('bad-apple-yt-player', {
+        height: '120',
+        width: '200',
+        videoId: DEFAULT_YT_ID,
+        playerVars: {
+          autoplay: 0,
+          controls: 1,
+        },
+        events: {
+          onReady: () => {
+            ytReady = true
+            console.log('YouTube Player Ready')
+            resolve()
+          },
+        },
+      })
+    }
+  })
+
   // UI for file upload
   const input = document.createElement('input')
   input.type = 'file'
@@ -25,15 +71,29 @@ const table_tag = 'table2'
   input.style.border = '2px solid red'
   document.body.appendChild(input)
 
+  const statusMsg = document.createElement('div')
+  statusMsg.style.position = 'fixed'
+  statusMsg.style.top = '60px'
+  statusMsg.style.left = '10px'
+  statusMsg.style.zIndex = '9999'
+  statusMsg.style.color = 'red'
+  statusMsg.style.fontWeight = 'bold'
+  document.body.appendChild(statusMsg)
+
+  ytPromise.then(() => {
+    statusMsg.textContent = 'YouTube Ready. Select .bin.gz file.'
+  })
+
   input.addEventListener('change', async (e) => {
     const file = e.target.files[0]
     if (!file) return
 
     try {
+      statusMsg.textContent = 'Loading and decompressing video data...'
       await startBadApple(file)
     } catch (err) {
       console.error('Error playing Bad Apple:', err)
-      alert('Error: ' + err.message)
+      statusMsg.textContent = 'Error: ' + err.message
     }
   })
 
@@ -43,6 +103,11 @@ const table_tag = 'table2'
     const decompressedStream = new Response(arrayBuffer).body.pipeThrough(ds)
     const decompressedBuffer = await new Response(decompressedStream).arrayBuffer()
     const data = new Uint8Array(decompressedBuffer)
+
+    if (!ytReady) {
+      statusMsg.textContent = 'Waiting for YouTube player...'
+      await ytPromise
+    }
 
     //Parse filename for metadata.
     const meta = parseFilename(file.name)
@@ -55,16 +120,14 @@ const table_tag = 'table2'
       videoHeight = meta.height
       fps = meta.fps
     } else {
-      // Fallback or guess
       console.warn('Could not parse resolution from filename, defaulting to 640x480')
     }
 
     console.log(`Video: ${videoWidth}x${videoHeight} @ ${fps}fps`)
 
     //Prepare the Table
-    //Change the table2 to any tag on table that you want to change
-    const table = document.getElementById('table2')
-    if (!table) throw new Error(`Table ${table} not found`)
+    const table = document.getElementById(table_tag)
+    if (!table) throw new Error(`Table #${table_tag} not found`)
 
     if (table.parentElement) {
       table.parentElement.style.height = 'auto'
@@ -72,21 +135,7 @@ const table_tag = 'table2'
     }
 
     const tbody = table.querySelector('tbody')
-    const thead = table.querySelector('thead')
     const rows = tbody.querySelectorAll('tr')
-
-    //Calculate Layout
-    //We want to maintain aspect ratio of the VIDEO (e.g. 4:3) on the TABLE.
-    //Video Ratio (VR) = videoWidth / videoHeight
-    //Table Ratio (TR) = tableCols / tableRows
-
-    //We want Final Table Ratio ≈ Video Ratio.
-    //If we have fixed Rows, we adjust Cols: Cols = Rows * VR
-    //If we have fixed Cols, we adjust Rows: Rows = Cols / VR
-
-    //To minimize disruption to existing content we "Anchor" on the dimension that is "larger"
-    //relative to the aspect ratio? No, we anchor on the one that implies the other needs to EXPAND.
-    //We don't want to shrink the table (delete rows/cols).
 
     const rowCount = rows.length
     const firstRowCells = rows[0].querySelectorAll('td')
@@ -98,26 +147,12 @@ const table_tag = 'table2'
     let targetColCount = existingColCount
     let targetRowCount = rowCount
 
-    console.log(`Current Table: ${existingColCount}x${rowCount} (Ratio: ${tableRatio.toFixed(2)})`)
-    console.log(`Target Video Ratio: ${videoRatio.toFixed(2)}`)
-
     if (tableRatio < videoRatio) {
-      //Table is too tall/narrow (e.g. 8x16 = 0.5 < 1.33).
-      //We need to WIDEN it (add columns).
-      //Anchor: Rows.
-      targetColCount = Math.ceil(rowCount * videoRatio * 2)
       targetColCount = Math.ceil(rowCount * videoRatio * 1.8)
-
-      console.log(`Expanding Columns from ${existingColCount} to ${targetColCount}`)
     } else {
-      //Table is too wide/short (e.g. 100x10 = 10 > 1.33).
-      //We need to HEIGHTEN it (add rows).
-      //Anchor: Cols.
       targetRowCount = Math.ceil(existingColCount / (videoRatio * 1.8))
-      console.log(`Expanding Rows from ${rowCount} to ${targetRowCount}`)
     }
 
-    //Ensure we don't shrink
     const finalCols = Math.max(targetColCount, existingColCount)
     const finalRows = Math.max(targetRowCount, rowCount)
 
@@ -126,34 +161,23 @@ const table_tag = 'table2'
     let cellHeight = '10px'
     let squareSize = 10
 
-    //Find a cell with content or just the first one
     if (rows.length > 0) {
       const sampleCell = rows[0].querySelector('td div') || rows[0].querySelector('td')
       if (sampleCell) {
         const rect = sampleCell.getBoundingClientRect()
         let _w = rect.width
         let _h = rect.height
-
-        //If sampleCell was just a TD without DIV, and it has no explicit size,
-        //getComputedStyle might be safer
         const style = window.getComputedStyle(sampleCell)
-        if (!style.width || style.width === 'auto') {
-          //Fallback
-        } else {
+        if (style.width && style.width !== 'auto') {
           _w = parseFloat(style.width) || _w
           _h = parseFloat(style.height) || _h
         }
-
-        //Force all cell to 1:1 ratio
         squareSize = Math.min(_w, _h)
         if (squareSize < 2) squareSize = 2
-
         cellWidth = squareSize + 'px'
         cellHeight = squareSize + 'px'
       }
     }
-
-    console.log(`Forcing square cells: ${squareSize}px (from sampled ${cellWidth} x ${cellHeight})`)
 
     const styleCell = (el) => {
       el.style.width = cellWidth
@@ -167,18 +191,15 @@ const table_tag = 'table2'
       el.style.boxSizing = 'border-box'
     }
 
-    //FORCE resizing existing cells in the table to matches this square ratio
-    //This is destructive to original view but required for grid consistency
     const allCells = table.querySelectorAll('td, th')
     allCells.forEach((cell) => {
       styleCell(cell)
-      //Also if there's a div inside, style it too?
       const div = cell.querySelector('div')
       if (div) styleCell(div)
     })
 
     //Expand Columns
-    //Add columns to Header
+    const thead = table.querySelector('thead')
     if (thead) {
       const headerRow = thead.querySelector('tr')
       if (headerRow) {
@@ -191,107 +212,97 @@ const table_tag = 'table2'
       }
     }
 
-    //Add columns to existing rows
     for (let r = 0; r < rowCount; r++) {
       const row = rows[r]
       for (let c = existingColCount; c < finalCols; c++) {
         const td = document.createElement('td')
         styleCell(td)
-
         const div = document.createElement('div')
         div.style.background = '#F0F0F0'
         styleCell(div)
-
         td.appendChild(div)
         row.appendChild(td)
       }
     }
 
-    //Expand Rows (if needed)
+    //Expand Rows
     for (let r = rowCount; r < finalRows; r++) {
       const row = document.createElement('tr')
       for (let c = 0; c < finalCols; c++) {
         const td = document.createElement('td')
         styleCell(td)
-
         const div = document.createElement('div')
         div.style.background = '#F0F0F0'
         styleCell(div)
-
         td.appendChild(div)
         row.appendChild(td)
       }
       tbody.appendChild(row)
     }
 
-    //Update our grid loop bounds
     const gridRows = finalRows
     const gridCols = finalCols
-
-    //Pre-calculate mapping
-    //Reload rows in case we added some
     const allRows = tbody.querySelectorAll('tr')
-
-    //Cache the cell elements for fast access
     const grid = []
     for (let r = 0; r < gridRows; r++) {
       const row = allRows[r]
       if (!row) continue
-
       const rowCells = row.querySelectorAll('td')
       const rowArr = []
       for (let c = 0; c < rowCells.length; c++) {
-        let target = rowCells[c].querySelector('div')
-        if (!target) {
-          target = rowCells[c]
-        }
+        let target = rowCells[c].querySelector('div') || rowCells[c]
         rowArr.push(target)
       }
       grid.push(rowArr)
     }
 
-    //Animation Loop
-    console.log('Starting animation...')
-    let frame = 0
-    const interval = 1000 / fps
-    const totalFrames = Math.floor(data.length / (Math.ceil(videoWidth / 8) * videoHeight))
-
-    //Pre-calc bytes per line for speed
+    //Animation Loop logic
     const rowBytes = Math.ceil(videoWidth / 8)
     const frameBytes = rowBytes * videoHeight
+    const totalFrames = Math.floor(data.length / frameBytes)
 
-    setInterval(() => {
-      const frameOffset = frame * frameBytes
-      if (frameOffset >= data.length) {
-        frame = 0
-        return
-      }
+    statusMsg.textContent = 'Playing...'
+    ytPlayer.playVideo()
 
-      for (let r = 0; r < gridRows; r++) {
-        //Map table row 'r' to video row 'vy'
-        const vy = Math.floor((r * videoHeight) / gridRows)
+    let lastFrame = -1
 
-        for (let c = 0; c < gridCols; c++) {
-          //Map table col 'c' to video col 'vx'
-          const vx = Math.floor((c * videoWidth) / gridCols)
+    function update() {
+      if (!ytPlayer) return
+      const currentTime = ytPlayer.getCurrentTime()
+      const currentFrame = Math.floor(currentTime * fps)
 
-          //Get pixel (vx, vy)
-          const byteIndex = frameOffset + vy * rowBytes + Math.floor(vx / 8)
-          const bitIndex = vx % 8
+      if (currentFrame !== lastFrame && currentFrame < totalFrames) {
+        const frameOffset = currentFrame * frameBytes
 
-          //Safety check
-          if (byteIndex < data.length) {
-            const isWhite = (data[byteIndex] & (0x80 >> bitIndex)) !== 0
+        for (let r = 0; r < gridRows; r++) {
+          const vy = Math.floor((r * videoHeight) / gridRows)
+          for (let c = 0; c < gridCols; c++) {
+            const vx = Math.floor((c * videoWidth) / gridCols)
+            const byteIndex = frameOffset + vy * rowBytes + Math.floor(vx / 8)
+            const bitIndex = vx % 8
 
-            if (grid[r] && grid[r][c]) {
-              grid[r][c].style.background = isWhite ? '#FFF' : '#000'
+            if (byteIndex < data.length) {
+              const isWhite = (data[byteIndex] & (0x80 >> bitIndex)) !== 0
+              if (grid[r] && grid[r][c]) {
+                const color = isWhite ? '#FFF' : '#000'
+                if (grid[r][c].style.background !== color) {
+                  grid[r][c].style.background = color
+                }
+              }
             }
           }
         }
+        lastFrame = currentFrame
       }
 
-      frame = (frame + 1) % totalFrames
-    }, interval)
+      if (currentFrame < totalFrames) {
+        requestAnimationFrame(update)
+      } else {
+        statusMsg.textContent = 'Finished.'
+      }
+    }
+
+    requestAnimationFrame(update)
   }
 
   function parseFilename(name) {
