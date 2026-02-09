@@ -14,6 +14,7 @@ const emit = defineEmits<{
     'loaded-metadata': [video: HTMLVideoElement]
     'timeupdate': [time: number]
     'progress': [percentage: number]
+    'canplaythrough': []
 }>()
 
 const videoRef = ref<HTMLVideoElement | null>(null)
@@ -62,9 +63,13 @@ const handleProgress = () => {
     const video = videoRef.value
     if (video && video.buffered.length > 0 && video.duration > 0) {
         const bufferedEnd = video.buffered.end(video.buffered.length - 1)
-        const progress = (bufferedEnd / video.duration) * 100
+        const progress = Math.min(100, (bufferedEnd / video.duration) * 100)
         emit('progress', progress)
     }
+}
+
+const handleCanPlayThrough = () => {
+    emit('canplaythrough')
 }
 
 const handleEnded = () => {
@@ -82,8 +87,9 @@ defineExpose({
 <template>
     <video ref="videoRef" class="video-background" :class="{ smooth: smoothInterpolation }" 
       :src="src" :muted="muted" playsinline loop
-      @loadedmetadata="handleLoadedMetadata" @timeupdate="handleTimeUpdate" 
-      @progress="handleProgress" @ended="handleEnded" />
+    @loadedmetadata="handleLoadedMetadata" @timeupdate="handleTimeUpdate" 
+    @progress="handleProgress" @canplaythrough="handleCanPlayThrough" 
+    @waiting="handleProgress" @stalled="handleProgress" @ended="handleEnded" />
 </template>
 
 <style scoped>

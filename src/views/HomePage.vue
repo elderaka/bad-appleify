@@ -88,8 +88,11 @@ onBeforeUnmount(() => {
 
 const handleVideoLoaded = (video: HTMLVideoElement) => {
   videoRef.value = video
-  isResourceLoading.value = false
   initCanvases()
+}
+
+const handleCanPlayThrough = () => {
+  isResourceLoading.value = false
 }
 
 const handleSeek = (time: number) => {
@@ -384,7 +387,7 @@ onBeforeUnmount(() => {
       :smooth-interpolation="smoothInterpolation"
       @update:current-time="currentTime = $event" @update:duration="duration = $event"
       @loaded-metadata="handleVideoLoaded" @timeupdate="handleTimeUpdate" 
-      @progress="resourceLoadingProgress = $event" />
+      @progress="resourceLoadingProgress = $event" @canplaythrough="handleCanPlayThrough" />
 
     <LoadingBar v-if="isResourceLoading" :current="resourceLoadingProgress" :total="100" label="LOADING ASSETS..." />
     <LoadingBar v-else-if="isRendering" :current="renderProgress.current" :total="renderProgress.total" label="PACKING FRAMES..." />
