@@ -49,12 +49,13 @@ const handleMouseDown = (e: MouseEvent) => {
 }
 
 const handleTouchStart = (e: TouchEvent) => {
-  if (isFullscreen.value || e.touches.length === 0) return
+  if (isFullscreen.value || !e.touches[0]) return
   const target = e.target as HTMLElement
   if (target.classList.contains('resize-handle')) return
   
+  const touch = e.touches[0]
   isDragging.value = true
-  dragStart.value = { x: e.touches[0].clientX, y: e.touches[0].clientY }
+  dragStart.value = { x: touch.clientX, y: touch.clientY }
   dragOffset.value = { ...position.value }
   window.addEventListener('touchmove', handleTouchMove)
   window.addEventListener('touchend', handleTouchEnd)
@@ -83,18 +84,19 @@ const handleMouseMove = (e: MouseEvent) => {
 }
 
 const handleTouchMove = (e: TouchEvent) => {
-  if (e.touches.length === 0) return
+  const touch = e.touches[0]
+  if (!touch) return
   
   if (isDragging.value && !isFullscreen.value) {
-    const deltaX = e.touches[0].clientX - dragStart.value.x
-    const deltaY = e.touches[0].clientY - dragStart.value.y
+    const deltaX = touch.clientX - dragStart.value.x
+    const deltaY = touch.clientY - dragStart.value.y
 
     position.value = {
       x: Math.max(0, Math.min(dragOffset.value.x + deltaX, window.innerWidth - windowSize.value)),
       y: Math.max(0, Math.min(dragOffset.value.y + deltaY, window.innerHeight - windowSize.value)),
     }
   } else if (isResizing.value) {
-    const delta = Math.max(e.touches[0].clientX - dragStart.value.x, e.touches[0].clientY - dragStart.value.y)
+    const delta = Math.max(touch.clientX - dragStart.value.x, touch.clientY - dragStart.value.y)
     const newSize = Math.max(200, Math.min(resizeStartSize.value + delta, Math.min(window.innerWidth, window.innerHeight)))
     windowSize.value = newSize
     
@@ -133,11 +135,13 @@ const handleResizeStart = (e: MouseEvent) => {
 }
 
 const handleResizeTouchStart = (e: TouchEvent) => {
-  if (isFullscreen.value || e.touches.length === 0) return
+  if (isFullscreen.value || !e.touches[0]) return
   e.stopPropagation()
   e.preventDefault()
+  
+  const touch = e.touches[0]
   isResizing.value = true
-  dragStart.value = { x: e.touches[0].clientX, y: e.touches[0].clientY }
+  dragStart.value = { x: touch.clientX, y: touch.clientY }
   resizeStartSize.value = windowSize.value
   window.addEventListener('touchmove', handleTouchMove)
   window.addEventListener('touchend', handleTouchEnd)

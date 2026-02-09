@@ -49,3 +49,10 @@ npm run build
 ```sh
 npm run lint
 ```
+
+### Deployment (Vercel)
+
+```sh
+npm install -g vercel
+vercel
+```

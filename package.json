@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build-wasm": "cd packer && cargo build --target wasm32-unknown-unknown --release && copy target\\wasm32-unknown-unknown\\release\\bad_apple_packer.wasm ..\\src\\assets\\wasm\\",
+    "build-wasm": "cd packer && cargo build --target wasm32-unknown-unknown --release && npx shx mkdir -p ../src/assets/wasm/ && npx shx cp target/wasm32-unknown-unknown/release/bad_apple_packer.wasm ../src/assets/wasm/",
     "dev": "vite",
     "build": "run-p type-check \"build-only {@}\" --",
     "preview": "vite preview",
@@ -34,6 +34,7 @@
     "npm-run-all2": "^8.0.4",
     "oxlint": "~1.42.0",
     "prettier": "3.8.1",
+    "shx": "^0.4.0",
     "typescript": "~5.9.3",
     "vite": "^7.3.1",
     "vite-plugin-vue-devtools": "^8.0.5",
