@@ -1,0 +1,310 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Bad Apple - 64x48 Table Demo</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        background: #000;
+        color: #fff;
+        font-family: 'Courier New', monospace;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        min-height: 100vh;
+        padding: 20px;
+      }
+
+      h1 {
+        margin-bottom: 20px;
+        font-size: 24px;
+        text-align: center;
+      }
+
+      .controls {
+        display: flex;
+        gap: 10px;
+        margin-bottom: 20px;
+        flex-wrap: wrap;
+        justify-content: center;
+        align-items: center;
+      }
+
+      input[type='file'] {
+        display: none;
+      }
+
+      button,
+      label {
+        background: #222;
+        border: 1px solid #444;
+        color: #fff;
+        padding: 10px 20px;
+        border-radius: 4px;
+        cursor: pointer;
+        font-family: inherit;
+        font-size: 14px;
+        transition: background 0.2s;
+      }
+
+      button:hover,
+      label:hover {
+        background: #333;
+      }
+
+      button:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+
+      .info {
+        display: flex;
+        gap: 20px;
+        margin-bottom: 10px;
+        font-size: 14px;
+        color: #888;
+      }
+
+      #frame-display {
+        border: 2px solid #333;
+        border-collapse: collapse;
+        image-rendering: pixelated;
+        margin-bottom: 10px;
+      }
+
+      #frame-display td {
+        width: 8px;
+        height: 8px;
+        padding: 0;
+        border: none;
+      }
+
+      .pixel-on {
+        background: #fff;
+      }
+
+      .pixel-off {
+        background: #000;
+      }
+
+      .error {
+        color: #f44;
+        margin-top: 20px;
+        max-width: 600px;
+        text-align: center;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Bad Apple - 64x48 Table Demo</h1>
+
+    <div class="controls">
+      <label for="file-input">📂 Load .bin.gz File</label>
+      <input type="file" id="file-input" accept=".gz,.bin" />
+      <button id="play-btn" disabled>▶️ Play</button>
+      <button id="pause-btn" disabled>⏸️ Pause</button>
+      <button id="reset-btn" disabled>⏮️ Reset</button>
+    </div>
+
+    <div class="info">
+      <span id="frame-info">No file loaded</span>
+      <span id="size-info"></span>
+      <span id="fps-info"></span>
+    </div>
+
+    <table id="frame-display"></table>
+
+    <div id="error" class="error"></div>
+
+    <script src="binary-decoder.js"></script>
+    <script>
+      const WIDTH = 64
+      const HEIGHT = 48
+      const FPS = 30
+
+      let animation = null
+      let currentFrame = 0
+      let isPlaying = false
+      let animationFrameId = null
+      let backgroundIntervalId = null
+      let startTime = null
+      let pausedTime = 0
+
+      const fileInput = document.getElementById('file-input')
+      const playBtn = document.getElementById('play-btn')
+      const pauseBtn = document.getElementById('pause-btn')
+      const resetBtn = document.getElementById('reset-btn')
+      const frameInfo = document.getElementById('frame-info')
+      const sizeInfo = document.getElementById('size-info')
+      const fpsInfo = document.getElementById('fps-info')
+      const frameDisplay = document.getElementById('frame-display')
+      const errorDiv = document.getElementById('error')
+
+      // Create table structure
+      function createTable() {
+        frameDisplay.innerHTML = ''
+        for (let y = 0; y < HEIGHT; y++) {
+          const row = document.createElement('tr')
+          for (let x = 0; x < WIDTH; x++) {
+            const cell = document.createElement('td')
+            cell.className = 'pixel-off'
+            row.appendChild(cell)
+          }
+          frameDisplay.appendChild(row)
+        }
+      }
+
+      // Render frame to table
+      function renderFrameToTable(frameIndex) {
+        if (!animation || frameIndex >= animation.frames.length) return
+
+        const frame = animation.frames[frameIndex]
+        const rows = frameDisplay.querySelectorAll('tr')
+
+        for (let y = 0; y < HEIGHT; y++) {
+          const cells = rows[y].querySelectorAll('td')
+          for (let x = 0; x < WIDTH; x++) {
+            const pixel = getPixel(frame, x, y, WIDTH)
+            cells[x].className = pixel ? 'pixel-on' : 'pixel-off'
+          }
+        }
+
+        currentFrame = frameIndex
+        frameInfo.textContent = `Frame ${frameIndex + 1} / ${animation.frameCount}`
+      }
+
+      // Load file
+      fileInput.addEventListener('change', async (e) => {
+        const file = e.target.files[0]
+        if (!file) return
+
+        errorDiv.textContent = ''
+        frameInfo.textContent = 'Loading...'
+
+        try {
+          // Create object URL for the file
+          const url = URL.createObjectURL(file)
+
+          // Load using binary decoder (supports .bin.gz automatically)
+          animation = await loadBadAppleBinary(url, WIDTH, HEIGHT)
+          URL.revokeObjectURL(url)
+
+          // Show info
+          const fileSize = (file.size / 1024).toFixed(2)
+          const duration = (animation.frameCount / FPS).toFixed(1)
+          sizeInfo.textContent = `Size: ${fileSize} KB`
+          fpsInfo.textContent = `Duration: ${duration}s @ ${FPS} fps`
+
+          // Enable controls
+          playBtn.disabled = false
+          pauseBtn.disabled = true
+          resetBtn.disabled = false
+
+          // Create table and render first frame
+          createTable()
+          currentFrame = 0
+          renderFrameToTable(0)
+        } catch (error) {
+          errorDiv.textContent = `Error loading file: ${error.message}`
+          console.error(error)
+        }
+      })
+
+      // Update frame based on elapsed time
+      function updateFrame(timestamp) {
+        if (!isPlaying || !animation) return
+
+        if (startTime === null) {
+          startTime = timestamp - pausedTime
+        }
+
+        const elapsed = timestamp - startTime
+        const targetFrame = Math.floor((elapsed / 1000) * FPS) % animation.frameCount
+
+        if (targetFrame !== currentFrame) {
+          currentFrame = targetFrame
+          renderFrameToTable(currentFrame)
+        }
+      }
+
+      // Animation loop using requestAnimationFrame (smooth in foreground)
+      function playAnimation(timestamp) {
+        if (!isPlaying || !animation) return
+
+        updateFrame(timestamp)
+        animationFrameId = requestAnimationFrame(playAnimation)
+      }
+
+      // Background timer to keep animation accurate even when tab is hidden
+      function startBackgroundTimer() {
+        backgroundIntervalId = setInterval(() => {
+          if (isPlaying && animation) {
+            updateFrame(performance.now())
+          }
+        }, 1000 / FPS)
+      }
+
+      function stopBackgroundTimer() {
+        if (backgroundIntervalId) {
+          clearInterval(backgroundIntervalId)
+          backgroundIntervalId = null
+        }
+      }
+
+      // Play animation
+      playBtn.addEventListener('click', () => {
+        if (!animation || isPlaying) return
+
+        isPlaying = true
+        playBtn.disabled = true
+        pauseBtn.disabled = false
+
+        animationFrameId = requestAnimationFrame(playAnimation)
+        startBackgroundTimer() // Keep playing even when tab is hidden
+      })
+
+      // Pause animation
+      pauseBtn.addEventListener('click', () => {
+        if (!isPlaying) return
+
+        isPlaying = false
+        playBtn.disabled = false
+        pauseBtn.disabled = true
+
+        if (animationFrameId) {
+          cancelAnimationFrame(animationFrameId)
+          animationFrameId = null
+        }
+
+        stopBackgroundTimer()
+
+        // Store how much time has elapsed for resume
+        if (startTime !== null) {
+          pausedTime = performance.now() - startTime
+        }
+      })
+
+      // Reset animation
+      resetBtn.addEventListener('click', () => {
+        if (isPlaying) {
+          pauseBtn.click()
+        }
+        currentFrame = 0
+        startTime = null
+        pausedTime = 0
+        renderFrameToTable(0)
+      })
+
+      // Initialize empty table
+      createTable()
+    </script>
+  </body>
+</html>
